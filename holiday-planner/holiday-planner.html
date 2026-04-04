@@ -631,6 +631,14 @@ let calYear, calMonth;
 let selectedDay = null;
 let currentFilter = 'all';
 
+/* ── Page renderers map (declared before init so renderAll can use it) ── */
+const PAGE_RENDERERS = {
+  dashboard: () => { renderStats(); renderUpcoming(); renderTodayProgress(); renderNextHolidays(); },
+  calendar:  () => { renderCalendar(); },
+  tasks:     () => { renderAllTasks(); },
+  holidays:  () => { renderHolidaysList(); },
+};
+
 /* ── Init ── */
 (function init() {
   const now = new Date();
@@ -647,15 +655,13 @@ function save() {
   localStorage.setItem('hp_holidays', JSON.stringify(holidays));
 }
 
-/* ── Render All ── */
+/* ── Render All (active page only) ── */
 function renderAll() {
-  renderStats();
-  renderUpcoming();
-  renderTodayProgress();
-  renderNextHolidays();
-  renderCalendar();
-  renderAllTasks();
-  renderHolidaysList();
+  const activePage = document.querySelector('.page.active');
+  const id = activePage ? activePage.id.replace('page-', '') : 'dashboard';
+  if (PAGE_RENDERERS[id]) PAGE_RENDERERS[id]();
+  // Always refresh stats when data changes on non-dashboard pages
+  if (id !== 'dashboard') renderStats();
 }
 
 /* ── Page Navigation ── */
@@ -664,7 +670,7 @@ function showPage(id, el) {
   document.getElementById('page-' + id).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
-  renderAll();
+  if (PAGE_RENDERERS[id]) PAGE_RENDERERS[id]();
 }
 
 /* ── Stats ── */
@@ -943,12 +949,11 @@ function saveTask() {
     time:     document.getElementById('task-time-input').value,
     priority: document.getElementById('task-priority-input').value,
     category: document.getElementById('task-category-input').value,
-    completed: false,
+    completed: id ? tasks.find(t => t.id === id)?.completed ?? false : false,
   };
 
   if (id) {
     const idx = tasks.findIndex(t => t.id === id);
-    payload.completed = tasks[idx].completed;
     tasks[idx] = payload;
     toast('✅ Task updated!');
   } else {
@@ -1022,7 +1027,10 @@ document.addEventListener('keydown', e => {
 });
 
 /* ── Utility ── */
-function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+let _uidCounter = 0;
+function uid() {
+  return Date.now().toString(36) + (++_uidCounter).toString(36) + Math.random().toString(36).slice(2);
+}
 
 function todayStr() {
   const d = new Date();
@@ -1034,9 +1042,11 @@ function dateStr(y, m, d) {
 }
 
 function fmtDate(ds) {
-  if (!ds) return '';
+  if (!ds || !/^\d{4}-\d{2}-\d{2}$/.test(ds)) return ds || '';
   const [y,m,d] = ds.split('-');
-  return new Date(+y, +m-1, +d).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+  const dt = new Date(+y, +m-1, +d);
+  if (isNaN(dt.getTime())) return ds;
+  return dt.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
 }
 
 function isHolidayDate(ds) {
